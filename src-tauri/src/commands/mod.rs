@@ -910,7 +910,7 @@ pub async fn get_gemini_status(
             return Ok(GeminiStatusResponse {
                 is_configured: true,
                 source: "ENV".to_string(),
-                model: "gemini-1.5-flash".to_string(),
+                model: "gemini-4-hydrogen".to_string(),
             });
         }
     }
@@ -922,7 +922,7 @@ pub async fn get_gemini_status(
                 return Ok(GeminiStatusResponse {
                     is_configured: true,
                     source: "SECURE_NATIVE_FILE".to_string(),
-                    model: "gemini-1.5-flash".to_string(),
+                    model: "gemini-4-hydrogen".to_string(),
                 });
             }
         }
@@ -934,7 +934,7 @@ pub async fn get_gemini_status(
             return Ok(GeminiStatusResponse {
                 is_configured: true,
                 source: "IN_MEMORY_STATE".to_string(),
-                model: "gemini-1.5-flash".to_string(),
+                model: "gemini-4-hydrogen".to_string(),
             });
         }
     }
@@ -942,7 +942,7 @@ pub async fn get_gemini_status(
     Ok(GeminiStatusResponse {
         is_configured: false,
         source: "NOT_CONFIGURED".to_string(),
-        model: "gemini-1.5-flash".to_string(),
+        model: "gemini-4-hydrogen".to_string(),
     })
 }
 
@@ -972,7 +972,7 @@ pub async fn stream_gemini_generate(
     prompt: String,
     model: Option<String>,
 ) -> Result<(), String> {
-    let chosen_model = model.unwrap_or_else(|| "gemini-1.5-flash".to_string());
+    let chosen_model = model.unwrap_or_else(|| "gemini-4-hydrogen".to_string());
 
     let resolved_key = {
         let lock = state.gemini_api_key.lock().map_err(|e| e.to_string())?;

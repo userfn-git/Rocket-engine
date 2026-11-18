@@ -884,6 +884,15 @@ class MasterEngineMainWindow(QMainWindow):
         ps_box = QTextEdit()
         ps_box.setReadOnly(True)
         ps_box.setPlainText(r'''# PowerShell Automated Deployment Script for Rocket League TAInput.ini
+param([switch]$Quiet = $false)
+
+function Write-EngineLog {
+    param([ValidateSet("STEP","INFO","OK","WARN","ERROR")][string]$Level, [string]$Message)
+    if ($Quiet -and $Level -eq "INFO") { return }
+    $colorMap = @{ STEP = "Cyan"; INFO = "DarkGray"; OK = "Green"; WARN = "Yellow"; ERROR = "Red" }
+    Write-Host ("[{0}][FNPro][{1}] {2}" -f (Get-Date -Format "HH:mm:ss"), $Level, $Message) -ForegroundColor $colorMap[$Level]
+}
+
 $targetDir = "$env:USERPROFILE\\Documents\\My Games\\Rocket League\\TAGame\\Config"
 $targetFile = "$targetDir\\TAInput.ini"
 
@@ -894,12 +903,11 @@ if (-not (Test-Path $targetDir)) {
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 if (Test-Path $targetFile) {
     Copy-Item $targetFile "$targetFile.backup_$timestamp" -Force
-    Write-Host "[BACKUP] Created backup: TAInput.ini.backup_$timestamp" -ForegroundColor Green
+    Write-EngineLog -Level "INFO" -Message "Created backup: TAInput.ini.backup_$timestamp"
 }
 
-Write-Host "[DEPLOY] Spacebar successfully assigned to ToggleBallCam." -ForegroundColor Cyan
-Write-Host "[DEPLOY] G1 assigned to Boost, G2 assigned to Jump." -ForegroundColor Cyan
-Write-Host "[SUCCESS] Rocket League TAInput.ini injected legally and safely." -ForegroundColor Yellow
+Write-EngineLog -Level "OK" -Message "Spacebar assigned to ToggleBallCam; G1=Boost, G2=Jump"
+Write-EngineLog -Level "OK" -Message "TAInput.ini deployed safely to $targetFile"
 ''')
         layout.addWidget(ps_box)
         return tab

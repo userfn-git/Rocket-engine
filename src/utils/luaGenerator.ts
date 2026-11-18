@@ -1,9 +1,10 @@
 import { PhysicsConfig, KeyBinding, MacroTimingConfig } from '../types/engine';
+import { INITIAL_MACRO_TIMINGS } from '../data/initialData';
 
 export function generateLuaScript(
   config: PhysicsConfig,
   keybindings: KeyBinding[],
-  _timings: MacroTimingConfig
+  _timings: MacroTimingConfig = INITIAL_MACRO_TIMINGS
 ): string {
   const getK = (actionId: string, fallback: string) => {
     const found = keybindings.find(b => b.id === actionId && b.layer === 0);

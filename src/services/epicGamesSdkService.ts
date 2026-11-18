@@ -69,7 +69,11 @@ export async function startEpicAuthentication(): Promise<string> {
     const authUrl = await invoke<string>('start_epic_oauth_login');
     // Open system browser for official authorization
     if (typeof window !== 'undefined') {
-      window.open(authUrl, '_blank');
+      const a = document.createElement('a');
+      a.href = authUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.click();
     }
     return authUrl;
   }

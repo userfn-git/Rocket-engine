@@ -74,13 +74,18 @@ export function generatePowerShellInstaller(
   // Escape backticks and double quotes for PowerShell
   const escapedIni = iniContent.replace(/`/g, '``').replace(/"/g, '`"');
 
-  return `# =====================================================================
-# ROCKET LEAGUE PROFESSIONAL MASTER-ENGINE - POWERSHELL AUTO-INSTALLER
-# Profile: ${profile.name}
-# Engine Version: 4.0.2 Local Deployer
-# =====================================================================
+  return `# Rocket League Professional Master Engine - Local PowerShell Deployer
+# Profile: ${profile.name} | Version: 4.0.2
+param([switch]$Quiet = $false)
 
 $ErrorActionPreference = "Stop"
+
+function Write-EngineLog {
+    param([ValidateSet("STEP","INFO","OK","WARN","ERROR")][string]$Level, [string]$Message)
+    if ($Quiet -and $Level -eq "INFO") { return }
+    $colorMap = @{ STEP = "Cyan"; INFO = "DarkGray"; OK = "Green"; WARN = "Yellow"; ERROR = "Red" }
+    Write-Host ("[{0}][FNPro][{1}] {2}" -f (Get-Date -Format "HH:mm:ss"), $Level, $Message) -ForegroundColor $colorMap[$Level]
+}
 
 # 1. Resolve Target Configuration Directory
 $RLConfigDir = [System.IO.Path]::Combine($env:USERPROFILE, "Documents", "My Games", "Rocket League", "TAGame", "Config")
@@ -88,17 +93,17 @@ $TargetIniFile = [System.IO.Path]::Combine($RLConfigDir, "TAInput.ini")
 $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $BackupFile = [System.IO.Path]::Combine($RLConfigDir, "TAInput.backup_$Timestamp.ini")
 
-Write-Host ">>> [RL-ENGINE] Initializing Local PowerShell Deployer..." -ForegroundColor Cyan
+Write-EngineLog -Level "STEP" -Message "Deploying calibrated TAInput.ini profile"
 
 # 2. Ensure target directory exists
 if (-not (Test-Path -Path $RLConfigDir)) {
-    Write-Host ">>> [RL-ENGINE] Creating Rocket League Config Directory: $RLConfigDir" -ForegroundColor Yellow
+    Write-EngineLog -Level "INFO" -Message "Creating Rocket League config directory: $RLConfigDir"
     New-Item -ItemType Directory -Path $RLConfigDir -Force | Out-Null
 }
 
 # 3. Create Safe Backup of existing TAInput.ini if present
 if (Test-Path -Path $TargetIniFile) {
-    Write-Host ">>> [RL-ENGINE] Creating safe timestamped backup: $BackupFile" -ForegroundColor Yellow
+    Write-EngineLog -Level "INFO" -Message "Creating timestamped backup: $BackupFile"
     Copy-Item -Path $TargetIniFile -Destination $BackupFile -Force
 }
 
@@ -107,11 +112,10 @@ $IniPayload = @"
 ${escapedIni}
 "@
 
-[System.IO.File]::WriteAllText($TargetIniFile, $IniPayload, [System.Text.Encoding]::UTF8)
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($TargetIniFile, $IniPayload, $utf8NoBom)
 
-Write-Host ">>> [SUCCESS] TAInput.ini successfully updated and verified!" -ForegroundColor Green
-Write-Host ">>> [PATH] $TargetIniFile" -ForegroundColor Gray
-Write-Host ">>> [SETTINGS] Deadzone: ${profile.deadzoneOverride} | Aerial Sense: ${profile.aerialSenseOverride}" -ForegroundColor Green
+Write-EngineLog -Level "OK" -Message "TAInput.ini updated at $TargetIniFile (Deadzone: ${profile.deadzoneOverride}, Aerial: ${profile.aerialSenseOverride})"
 `;
 }
 
@@ -121,10 +125,15 @@ Write-Host ">>> [SETTINGS] Deadzone: ${profile.deadzoneOverride} | Aerial Sense:
 export function generateGHubPowerShellInjector(luaTableContent: string): string {
   const escapedLua = luaTableContent.replace(/`/g, '``').replace(/"/g, '`"');
 
-  return `# =====================================================================
-# LOGITECH G HUB RUNTIME CONFIG - POWERSHELL AUTO-INJECTOR
-# Engine Version: 4.0.2 Local Deployer
-# =====================================================================
+  return `# Logitech G HUB Runtime Config - PowerShell Auto-Injector (v4.0.2)
+param([switch]$Quiet = $false)
+
+function Write-EngineLog {
+    param([ValidateSet("STEP","INFO","OK","WARN","ERROR")][string]$Level, [string]$Message)
+    if ($Quiet -and $Level -eq "INFO") { return }
+    $colorMap = @{ STEP = "Cyan"; INFO = "DarkGray"; OK = "Green"; WARN = "Yellow"; ERROR = "Red" }
+    Write-Host ("[{0}][FNPro][{1}] {2}" -f (Get-Date -Format "HH:mm:ss"), $Level, $Message) -ForegroundColor $colorMap[$Level]
+}
 
 $GHubScriptDir = [System.IO.Path]::Combine($env:LOCALAPPDATA, "LGHUB", "scripts")
 $TargetLuaFile = [System.IO.Path]::Combine($GHubScriptDir, "rl_master_engine.lua")
@@ -137,7 +146,8 @@ $LuaPayload = @"
 ${escapedLua}
 "@
 
-[System.IO.File]::WriteAllText($TargetLuaFile, $LuaPayload, [System.Text.Encoding]::UTF8)
-Write-Host ">>> [SUCCESS] Logitech G HUB Lua Config Table Injected to $TargetLuaFile!" -ForegroundColor Green
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($TargetLuaFile, $LuaPayload, $utf8NoBom)
+Write-EngineLog -Level "OK" -Message "Logitech G HUB Lua table deployed to $TargetLuaFile"
 `;
 }

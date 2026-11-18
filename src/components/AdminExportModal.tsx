@@ -38,6 +38,8 @@ import {
   Settings
 } from 'lucide-react';
 
+import { UnifiedMasterProfileArm } from '../services/unifiedProfileArm';
+
 interface AdminExportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -46,6 +48,7 @@ interface AdminExportModalProps {
   physicsConfig?: PhysicsConfig;
   keybindings?: KeyBinding[];
   activeProfileId?: string;
+  unifiedProfileArm?: UnifiedMasterProfileArm;
   onRestorePhysicsConfig?: (config: PhysicsConfig) => void;
   onRestoreKeybindings?: (bindings: KeyBinding[]) => void;
   onRestoreProfiles?: (profiles: GameProfile[]) => void;
@@ -59,6 +62,7 @@ export const AdminExportModal: React.FC<AdminExportModalProps> = ({
   physicsConfig,
   keybindings = [],
   activeProfileId = '',
+  unifiedProfileArm,
   onRestorePhysicsConfig,
   onRestoreKeybindings,
   onRestoreProfiles,
@@ -77,11 +81,13 @@ export const AdminExportModal: React.FC<AdminExportModalProps> = ({
   const [newSnapDesc, setNewSnapDesc] = useState<string>('');
   const [showImportDialog, setShowImportDialog] = useState<boolean>(false);
   const [importJsonText, setImportJsonText] = useState<string>('');
+  const [importError, setImportError] = useState<string | null>(null);
 
-  // Load all authentic project files
+  // Load all authentic project files unified with the active Master Profile Arm
   const projectFiles = useMemo(() => {
-    return getAllProjectFiles();
-  }, []);
+    const unifiedJson = unifiedProfileArm ? JSON.stringify(unifiedProfileArm, null, 2) : undefined;
+    return getAllProjectFiles(unifiedJson);
+  }, [unifiedProfileArm]);
 
   const fileEntries = useMemo(() => {
     return Object.entries(projectFiles).sort(([a], [b]) => a.localeCompare(b));
@@ -219,12 +225,13 @@ export const AdminExportModal: React.FC<AdminExportModalProps> = ({
   };
 
   const handleImportSnapshots = () => {
+    setImportError(null);
     try {
       const parsed = JSON.parse(importJsonText);
       const list = Array.isArray(parsed) ? parsed : [parsed];
       const valid = list.filter(validateSnapshotIntegrity);
       if (valid.length === 0) {
-        alert(isAr ? 'خطأ: لم يتم العثور على نقاط استعادة صالحة في ملف JSON.' : 'Error: No valid restore points found in JSON.');
+        setImportError(isAr ? 'خطأ: لم يتم العثور على نقاط استعادة صالحة في ملف JSON.' : 'Error: No valid restore points found in JSON.');
         return;
       }
       const merged = [...valid, ...snapshots.filter(s => !valid.some(v => v.id === s.id))];
@@ -232,10 +239,11 @@ export const AdminExportModal: React.FC<AdminExportModalProps> = ({
       saveSnapshotsToStorage(merged);
       setShowImportDialog(false);
       setImportJsonText('');
+      setImportError(null);
       setDownloadSuccessToast(isAr ? `✓ تم استيراد ${valid.length} نقطة استعادة بنجاح!` : `✓ Imported ${valid.length} restore points!`);
       setTimeout(() => setDownloadSuccessToast(null), 3500);
     } catch {
-      alert(isAr ? 'خطأ في قراءة ملف JSON' : 'Invalid JSON content');
+      setImportError(isAr ? 'خطأ في قراءة ملف JSON' : 'Invalid JSON content');
     }
   };
 
@@ -496,10 +504,18 @@ git push -u origin main
                     <textarea
                       rows={3}
                       value={importJsonText}
-                      onChange={(e) => setImportJsonText(e.target.value)}
+                      onChange={(e) => {
+                        setImportJsonText(e.target.value);
+                        if (importError) setImportError(null);
+                      }}
                       placeholder="Paste JSON array of snapshots here..."
                       className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs font-mono text-cyan-300 outline-none"
                     />
+                    {importError && (
+                      <div className="p-2 rounded-lg bg-rose-950/60 border border-rose-500/40 text-[11px] font-mono text-rose-300">
+                        {importError}
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
                       <input
                         type="file"

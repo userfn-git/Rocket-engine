@@ -30,6 +30,7 @@ import {
 import { isTauriDesktop } from '../services/gemini';
 import { getMandatoryGHubScriptDir } from '../utils/ghubDirectoryConfig';
 import { EngineSettingsModal } from './EngineSettingsModal';
+import { MacroTimingVisualizer } from './MacroTimingVisualizer';
 
 interface KeybindLayerZeroProps {
   keybindings: KeyBinding[];
@@ -924,6 +925,14 @@ export const KeybindLayerZero: React.FC<KeybindLayerZeroProps> = ({
           })}
         </div>
       </div>
+
+      {/* MACRO TIMING VISUALIZER (DRAGGABLE AERIAL HOLDS & GROUND RECOVERY CHART) */}
+      <MacroTimingVisualizer
+        timings={macroTimings}
+        onChangeTimings={onChangeTimings}
+        language={language}
+        onDispatchToast={setInjectToast}
+      />
 
       {/* LAYER 1 AUTO-MUTE CONTROLLERS BANNER */}
       {activeLayer === 1 && (

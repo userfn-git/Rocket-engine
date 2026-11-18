@@ -56,6 +56,12 @@ export const UnrealSymmetricEngine: React.FC<UnrealSymmetricEngineProps> = ({
 
   const config = propConfig || internalConfig;
 
+  useEffect(() => {
+    if (propConfig) {
+      setInternalConfig(propConfig);
+    }
+  }, [propConfig]);
+
   const [bipolarInput, setBipolarInput] = useState<number>(0.0); // [-1.0, +1.0]
   const [probeSpeed, setProbeSpeed] = useState<number>(2240); // 0 to 2300 uu/s
   const [toastMessage, setToastMessage] = useState<string | null>(null);

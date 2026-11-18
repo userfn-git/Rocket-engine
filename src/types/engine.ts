@@ -209,11 +209,14 @@ export interface ClipBookmark {
 }
 
 export type ActiveTab = 
+  | 'dynamic_cockpit'     // غرفة القيادة الديناميكية الموحدة ومحرك الهاردوير
+  | 'hardware_health'     // صحة الهاردوير 1000Hz، كيبورد G PRO X 60، وتسجيل الفري بلاي
   | 'classic_pro'         // المحرك الكلاسيكي المعتمد (المحرك الرئيسي)
   | 'unreal_symmetric'    // محرك إنريل المتناظر 1:-1
   | 'layer0'              // كيبورد زيرو DirectInput
   | 'unified_radar'       // رادار المتجهات وفيزياء الحركات الحية (Polar Scope + Codex + D3 Drift + Live Telemetry)
   | 'macros'              // الماكرو الشامل الموحد
+  | 'macro_visualizer'    // مخطط توقيتات الماكرو المرئي
   | 'replay_analyzer'     // تحليل الريبلاي والذكاء الاصطناعي
   | 'ballchasing_cloud'   // سحابة Ballchasing.com والمزامنة
   | 'history_audit'       // سجل التعديلات والعمليات الكامل
@@ -224,6 +227,49 @@ export type ActiveTab =
   | 'physics'             // Alias for classic_pro
   | 'streamer_overlay'    // Alias for unified_radar
   | 'mechanics';          // Alias for unified_radar
+
+export interface FreePlayTelemetryPoint {
+  timeSec: number;
+  velocityUu: number;
+  isSupersonic: boolean;
+  throttle: number;
+  steer: number;
+  pitch: number;
+  yaw: number;
+  roll: number;
+  inAir: boolean;
+  boostActive: boolean;
+  mechanicEvent?: string;
+}
+
+export interface FreePlaySession {
+  id: string;
+  name: string;
+  startedAt: string;
+  durationSec: number;
+  averageVelocityUu: number;
+  supersonicPercent: number;
+  airTimePercent: number;
+  speedflipsAttempted: number;
+  speedflipsClean: number;
+  waveDashesLanded: number;
+  airDribblesRecorded: number;
+  points: FreePlayTelemetryPoint[];
+}
+
+export interface GProX60Telemetry {
+  isConnected: boolean;
+  firmwareVersion: string;
+  batteryPercent: number;
+  wirelessMode: 'LIGHTSPEED_1MS' | 'BLUETOOTH' | 'USB_WIRED';
+  reportRateHz: number;
+  opticalSwitchDebounceMs: number;
+  actuationPointMm: number; // 1.0 to 4.0 mm
+  activeLayer: 'BASE' | 'FN_LAYER' | 'G_SHIFT';
+  pressedKeys: string[];
+  lastScancode: string;
+  debounceLatencyUs: number;
+}
 
 export interface PolarVectorPoint {
   angleDeg: number;

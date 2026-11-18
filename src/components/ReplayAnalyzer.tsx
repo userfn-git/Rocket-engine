@@ -47,7 +47,7 @@ import {
   Cpu,
   HardDrive
 } from 'lucide-react';
-import { isTauriDesktop, checkGeminiStatus, saveGeminiApiKey, streamGeminiResponse } from '../services/gemini';
+import { isTauriDesktop, checkGeminiStatus, streamGeminiResponse, GEMINI_ACTIVE_MODEL } from '../services/gemini';
 import { 
   getLiveGameLogStatus, 
   fetchBallchasingReplayStats, 
@@ -94,10 +94,8 @@ export const ReplayAnalyzer: React.FC<ReplayAnalyzerProps> = ({
   const [aiPrompt, setAiPrompt] = useState<string>('');
   const [aiStreamingText, setAiStreamingText] = useState<string>('');
   const [isAiGenerating, setIsAiGenerating] = useState<boolean>(false);
-  const [aiApiKeyInput, setAiApiKeyInput] = useState<string>('');
   const [hasApiKey, setHasApiKey] = useState<boolean>(false);
-  const [apiKeySource, setApiKeySource] = useState<string>('NOT_CONFIGURED');
-  const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
+  const [apiKeySource, setApiKeySource] = useState<string>('LOCAL_OFFLINE_ENGINE');
   const [exportFormatNotification, setExportFormatNotification] = useState<string | null>(null);
 
   // Ballchasing.com REST API state
@@ -197,15 +195,16 @@ export const ReplayAnalyzer: React.FC<ReplayAnalyzerProps> = ({
 
   // Check Gemini configuration status and scan Demos directory on mount
   useEffect(() => {
+    checkGeminiStatus()
+      .then((status) => {
+        setHasApiKey(status.isConfigured);
+        setApiKeySource(status.source);
+      })
+      .catch(() => {
+        setHasApiKey(false);
+        setApiKeySource('LOCAL_OFFLINE_ENGINE');
+      });
     if (isTauriDesktop()) {
-      checkGeminiStatus()
-        .then((status) => {
-          setHasApiKey(status.isConfigured);
-          setApiKeySource(status.source);
-        })
-        .catch(() => {
-          setHasApiKey(false);
-        });
       scanNativeDemosDirectory();
     }
     refreshLiveLog();
@@ -426,61 +425,22 @@ Current Frame Telemetry: Velocity=${currentFrame?.physics.velocityUu || 0} uu/s,
 User Question: ${promptToRun}`;
 
     try {
-      if (isTauriDesktop()) {
-        await streamGeminiResponse(contextPrompt, {
-          onChunk: (chunk) => {
-            setAiStreamingText((prev) => prev + chunk);
-          },
-          onComplete: () => {
-            setIsAiGenerating(false);
-          },
-          onError: (err) => {
-            setAiStreamingText((prev) => prev + `\n[Error: ${err}]`);
-            setIsAiGenerating(false);
-          }
-        });
-      } else {
-        // Fallback simulated explanation for browser preview
-        const responseLines = [
-          `**Analysis of Telemetry Synchronicity for ${activeReplay.matchName}:**\n`,
-          `1. **Supersonic Efficiency**: Your current velocity peaks at **${currentFrame?.physics.velocityUu || 2240} uu/s**, securely inside the 2200-2300 uu/s optimal envelope. Boost feathering matches DirectInput 1000Hz polling rate.`,
-          `2. **Steer & Deadzone Responsiveness**: With an internal deadzone of **${physicsConfig.internalDeadzone}** and dodge deadzone of **${physicsConfig.dodgeDeadzone}**, there is zero mechanical stick drift detected during directional air rolls.`,
-          `3. **Keybind Isolation**: W/S/A/D throttle and steering channels show instantaneous state changes (<1.0ms latency) mapped directly to hardware scancodes.`,
-          `4. **Recommended Adjustment**: Maintain the 1.45 curve exponent for progressive aerial stability while keeping ground sensitivity locked at 1.50x.`
-        ];
-        let i = 0;
-        const interval = setInterval(() => {
-          if (i < responseLines.length) {
-            setAiStreamingText((prev) => prev + responseLines[i] + '\n\n');
-            i++;
-          } else {
-            clearInterval(interval);
-            setIsAiGenerating(false);
-          }
-        }, 120);
-      }
+      await streamGeminiResponse(contextPrompt, {
+        onChunk: (chunk) => {
+          setAiStreamingText((prev) => prev + chunk);
+        },
+        onComplete: () => {
+          setIsAiGenerating(false);
+        },
+        onError: (err) => {
+          setAiStreamingText((prev) => prev + `\n[Error: ${err}]`);
+          setIsAiGenerating(false);
+        }
+      }, GEMINI_ACTIVE_MODEL);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setAiStreamingText(`Error: ${msg}`);
       setIsAiGenerating(false);
-    }
-  };
-
-  const handleSaveApiKey = async () => {
-    if (!aiApiKeyInput.trim()) return;
-    try {
-      if (isTauriDesktop()) {
-        await saveGeminiApiKey(aiApiKeyInput.trim());
-        setHasApiKey(true);
-        setApiKeySource('SECURE_NATIVE_FILE');
-      } else {
-        setHasApiKey(true);
-        setApiKeySource('IN_MEMORY_STATE');
-      }
-      setShowKeyModal(false);
-      setAiApiKeyInput('');
-    } catch (e: unknown) {
-      alert(`Failed to save key: ${e}`);
     }
   };
 
@@ -502,7 +462,7 @@ User Question: ${promptToRun}`;
                 BOXCARS v0.43 NATIVE
               </span>
               <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-                GEMINI 1.5 FLASH
+                GEMINI 4 HYDROGEN
               </span>
               <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
                 1000Hz DIRECTINPUT SYNC
@@ -832,57 +792,24 @@ User Question: ${promptToRun}`;
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold text-white tracking-wide">
-                  {isAr ? 'محرك تحليل التيليميتري بالذكاء الاصطناعي (Gemini 1.5 Flash Native)' : 'Embedded Gemini 1.5 Telemetry AI Studio'}
+                  {isAr ? 'محرك تحليل التيليميتري بالذكاء الاصطناعي (Gemini 4 Hydrogen)' : 'Server-Side & Local Telemetry AI Studio (Gemini 4)'}
                 </h3>
-                <span className={`text-[10px] font-mono px-2 py-0.5 rounded border font-bold ${hasApiKey ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border-amber-500/30'}`}>
-                  {hasApiKey ? `AUTHENTICATED (${apiKeySource})` : 'READY TO ANALYZE'}
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded border font-bold ${hasApiKey ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'}`}>
+                  {hasApiKey ? `SERVER PROXY (${apiKeySource})` : 'LOCALHOST TELEMETRY READY'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
                 {isAr 
-                  ? 'يقوم النموذج بتحليل تزامن القنوات الفيزيائية والمدخلات وتقديم اقتراحات فورية لتحسين السرعة والانجراف.'
-                  : 'Embedded streaming AI assistant analyzing rigid body curves, deadzone linearity, and supersonic flight windows.'}
+                  ? 'يقوم النموذج بتحليل تزامن القنوات الفيزيائية والمدخلات عبر الخادم المحلي وتقديم اقتراحات فورية لتحسين السرعة والانجراف.'
+                  : 'Server-side proxy with local offline fallback analyzing rigid body curves, deadzone linearity, and supersonic flight windows.'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowKeyModal(!showKeyModal)}
-              className="px-3 py-1.5 text-xs font-mono bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-slate-700 rounded-lg transition-colors cursor-pointer"
-            >
-              {hasApiKey ? 'Update API Key' : 'Configure API Key'}
-            </button>
+          <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+            <span>{GEMINI_ACTIVE_MODEL}</span>
           </div>
         </div>
-
-        {/* API Key Modal / Form */}
-        {showKeyModal && (
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-700 space-y-3 animate-in fade-in">
-            <div className="text-xs font-bold text-white flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Native Gemini API Key Secure Vault</span>
-            </div>
-            <p className="text-[11px] text-slate-400">
-              Key is stored in Rust backend memory and encrypted in <code className="text-cyan-400">%APPDATA%/RocketLeagueMasterEngine/vault.bin</code>. Never exposed to browser DOM.
-            </p>
-            <div className="flex items-center gap-2">
-              <input
-                type="password"
-                value={aiApiKeyInput}
-                onChange={(e) => setAiApiKeyInput(e.target.value)}
-                placeholder="AIzaSy..."
-                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-500"
-              />
-              <button
-                onClick={handleSaveApiKey}
-                className="px-4 py-2 text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-lg transition-all cursor-pointer"
-              >
-                Save Securely
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Quick Analytical Presets */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs font-mono">

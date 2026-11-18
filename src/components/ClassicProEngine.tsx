@@ -10,6 +10,7 @@ import { NativeCppLuaStudio } from './NativeCppLuaStudio';
 import { ReplayAnalyzer } from './ReplayAnalyzer';
 import { EngineAuditHistoryPanel } from './EngineAuditHistoryPanel';
 import { EngineTreeVisualizer } from './EngineTreeVisualizer';
+import { MacroTimingVisualizer } from './MacroTimingVisualizer';
 import { 
   Rocket, 
   RotateCcw, 
@@ -25,7 +26,8 @@ import {
   Code2, 
   FileSearch, 
   History,
-  GitBranch
+  GitBranch,
+  BarChart3
 } from 'lucide-react';
 
 interface ClassicProEngineProps {
@@ -104,6 +106,12 @@ export const ClassicProEngine: React.FC<ClassicProEngineProps> = ({
   });
 
   const config = propConfig || internalConfig;
+
+  useEffect(() => {
+    if (propConfig) {
+      setInternalConfig(propConfig);
+    }
+  }, [propConfig]);
 
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [isCurveLocked, setIsCurveLocked] = useState<boolean>(() => {
@@ -266,6 +274,12 @@ export const ClassicProEngine: React.FC<ClassicProEngineProps> = ({
       label: isAr ? 'كيبورد زيرو والماكرو' : 'Keyboard Zero & Macros',
       icon: Keyboard,
       desc: isAr ? 'مصفوفة 1000Hz وسكريبتات G-HUB' : '1000Hz matrix & G-HUB'
+    },
+    {
+      id: 'macro_visualizer',
+      label: isAr ? 'مخطط توقيتات الماكرو' : 'Macro Timing Visualizer',
+      icon: BarChart3,
+      desc: isAr ? 'تثبيت الطيران والاستعادة بالسحب' : 'Draggable aerial & recovery chart'
     },
     {
       id: 'radar_codex',
@@ -836,6 +850,18 @@ export const ClassicProEngine: React.FC<ClassicProEngineProps> = ({
       {activeBranch === 'audit_trail' && (
         <EngineAuditHistoryPanel
           language={language}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* BRANCH 8: INTERACTIVE MACRO TIMING VISUALIZER */}
+      {/* ========================================================================= */}
+      {activeBranch === 'macro_visualizer' && (
+        <MacroTimingVisualizer
+          timings={macroTimings}
+          onChangeTimings={onChangeTimings}
+          language={language}
+          onDispatchToast={onDispatchToast}
         />
       )}
 

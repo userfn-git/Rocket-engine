@@ -2,25 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { Language } from '../types/engine';
 import { 
   GitBranch, 
-  GitCommit, 
-  UploadCloud, 
   CheckCircle2, 
   ShieldCheck, 
-  ExternalLink, 
   Copy, 
   Check, 
   Download, 
   RefreshCw, 
   Terminal, 
-  AlertCircle,
   Database,
   Cpu,
   FileCode2,
   Lock,
-  UserCheck,
   LogOut,
-  FolderLock,
-  Sparkles
+  FolderLock
 } from 'lucide-react';
 import { getMandatoryGHubScriptDir } from '../utils/ghubDirectoryConfig';
 
@@ -31,11 +25,73 @@ interface GitHubSyncModalProps {
 }
 
 const GITHUB_REPO = 'https://github.com/userfn-git/FNProMasterEngine.git';
-const GITHUB_AUTHOR = 'userfn-git';
-const PRIMARY_GOOGLE_ACCOUNT = 'ai.workgroup.link@gmail.com';
-const FALLBACK_GOOGLE_ACCOUNT = 'fnprospace@gmail.com';
+export const GITHUB_AUTHOR = 'userfn-git';
+export const GITHUB_PRIMARY_EMAIL = 'fnprospace@gmail.com';
+const LEGACY_STALE_EMAIL = 'ai.workgroup.link@gmail.com';
 const STORAGE_LOGGED_IN = 'fnpro_github_logged_in_v2';
-const STORAGE_USER_EMAIL = 'fnpro_github_user_email_v2';
+const STORAGE_USER_EMAIL = 'fnpro_github_user_email_v3';
+const LEGACY_STORAGE_USER_EMAIL = 'fnpro_github_user_email_v2';
+
+export function sanitizeGitEmail(candidate?: string | null): string {
+  const trimmed = (candidate || '').trim();
+  if (!trimmed || trimmed.toLowerCase() === LEGACY_STALE_EMAIL) {
+    return GITHUB_PRIMARY_EMAIL;
+  }
+  return trimmed.replace(/["`$\\;\r\n]/g, '');
+}
+
+export function buildGitSyncCommand(email: string): string {
+  const safeEmail = sanitizeGitEmail(email);
+  return `cd /d "%LOCALAPPDATA%\\FNProMasterEngine" || cd /d "%~dp0"
+git config user.name "${GITHUB_AUTHOR}"
+git config user.email "${safeEmail}"
+git remote set-url origin ${GITHUB_REPO}
+git add .
+git commit -m "chore(engine): sync telemetry database, RLCS calibrations & native C++/Lua subsystems [automated]"
+git push -u origin main`;
+}
+
+export function buildGitSyncBatchScript(email: string, ghubDir: string): string {
+  const safeEmail = sanitizeGitEmail(email);
+  return `@echo off
+setlocal EnableDelayedExpansion
+call :Log STEP "Starting GitHub repository sync (${GITHUB_REPO})"
+call :Log INFO "Author: ${GITHUB_AUTHOR} (${safeEmail})"
+
+:: 1. Navigate directly to local application directory
+set "ENGINE_DIR=%LOCALAPPDATA%\\FNProMasterEngine"
+if not exist "%ENGINE_DIR%" (
+  set "ENGINE_DIR=%~dp0"
+)
+cd /d "%ENGINE_DIR%"
+call :Log INFO "Working directory: %CD%"
+
+:: 2. Target Mandatory Logitech G-HUB script directory
+set "GHUB_DIR=${ghubDir}"
+if not exist "%GHUB_DIR%" mkdir "%GHUB_DIR%" 2>nul
+call :Log INFO "Logitech G-HUB directory: %GHUB_DIR%"
+
+:: 3. Execute Git remote sync with full WAL logs & configs
+git config user.name "${GITHUB_AUTHOR}"
+git config user.email "${safeEmail}"
+git remote set-url origin ${GITHUB_REPO}
+git add .
+git commit -m "chore(engine): sync SQLite WAL audit logs, RLCS calibrations and C++/Lua subsystems [%date% %time%]"
+git push -u origin main
+call :Log OK "Repository and audit log sync complete in %CD%"
+pause
+exit /b 0
+
+:Log
+set "LOG_LVL=%~1"
+set "LOG_MSG=%~2"
+if /i "%FNPRO_QUIET%"=="1" if /i "!LOG_LVL!"=="INFO" goto :eof
+set "LOG_TS=%TIME:~0,8%"
+set "LOG_TS=!LOG_TS: =0!"
+echo [!LOG_TS!][FNPro][!LOG_LVL!] !LOG_MSG!
+goto :eof
+`;
+}
 
 export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   isOpen,
@@ -45,11 +101,28 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   const isAr = language === 'ar';
   
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    return localStorage.getItem(STORAGE_LOGGED_IN) === 'true';
+    try {
+      return localStorage.getItem(STORAGE_LOGGED_IN) === 'true';
+    } catch {
+      return false;
+    }
   });
 
   const [activeUserEmail, setActiveUserEmail] = useState<string>(() => {
-    return localStorage.getItem(STORAGE_USER_EMAIL) || PRIMARY_GOOGLE_ACCOUNT;
+    try {
+      const legacy = localStorage.getItem(LEGACY_STORAGE_USER_EMAIL);
+      if (legacy === LEGACY_STALE_EMAIL) {
+        localStorage.removeItem(LEGACY_STORAGE_USER_EMAIL);
+      }
+      const saved = localStorage.getItem(STORAGE_USER_EMAIL);
+      const resolved = sanitizeGitEmail(saved);
+      if (saved !== resolved) {
+        localStorage.setItem(STORAGE_USER_EMAIL, resolved);
+      }
+      return resolved;
+    } catch {
+      return GITHUB_PRIMARY_EMAIL;
+    }
   });
 
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -59,9 +132,9 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   const [syncedLogCount, setSyncedLogCount] = useState<number>(48);
 
   useEffect(() => {
-    const savedTime = localStorage.getItem('fnpro_last_github_sync');
-    if (savedTime) setLastSyncTime(savedTime);
     try {
+      const savedTime = localStorage.getItem('fnpro_last_github_sync');
+      if (savedTime) setLastSyncTime(savedTime);
       const logsRaw = localStorage.getItem('fnpro_engine_audit_log_v2');
       if (logsRaw) {
         const parsed = JSON.parse(logsRaw);
@@ -72,27 +145,46 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
 
   if (!isOpen) return null;
 
-  // 1-Click Google Sign-In
+  const resolvedEmail = sanitizeGitEmail(activeUserEmail);
+
+  const handleEmailChange = (nextEmail: string) => {
+    setActiveUserEmail(nextEmail);
+    try {
+      const trimmed = nextEmail.trim();
+      if (trimmed) {
+        localStorage.setItem(STORAGE_USER_EMAIL, trimmed);
+      }
+    } catch {}
+  };
+
+  const handleResetDefaultEmail = () => {
+    setActiveUserEmail(GITHUB_PRIMARY_EMAIL);
+    try {
+      localStorage.setItem(STORAGE_USER_EMAIL, GITHUB_PRIMARY_EMAIL);
+    } catch {}
+  };
+
+  // 1-Click Google & GitHub Sign-In using verified fnprospace@gmail.com identity
   const handleGoogleSignIn = () => {
+    const emailToUse = sanitizeGitEmail(activeUserEmail);
     setIsLoggedIn(true);
-    setActiveUserEmail(PRIMARY_GOOGLE_ACCOUNT);
-    localStorage.setItem(STORAGE_LOGGED_IN, 'true');
-    localStorage.setItem(STORAGE_USER_EMAIL, PRIMARY_GOOGLE_ACCOUNT);
+    setActiveUserEmail(emailToUse);
+    try {
+      localStorage.setItem(STORAGE_LOGGED_IN, 'true');
+      localStorage.setItem(STORAGE_USER_EMAIL, emailToUse);
+    } catch {}
     handleTriggerSync();
   };
 
   const handleDisconnect = () => {
     setIsLoggedIn(false);
-    localStorage.removeItem(STORAGE_LOGGED_IN);
-    localStorage.removeItem(STORAGE_USER_EMAIL);
+    try {
+      localStorage.removeItem(STORAGE_LOGGED_IN);
+    } catch {}
     setSyncStatus('idle');
   };
 
-  const gitSyncCommand = `cd /d "%LOCALAPPDATA%\\FNProMasterEngine" || cd /d "%~dp0"
-git remote set-url origin https://github.com/userfn-git/FNProMasterEngine.git
-git add .
-git commit -m "chore(engine): sync telemetry database, RLCS calibrations & native C++/Lua subsystems [automated]"
-git push -u origin main`;
+  const gitSyncCommand = buildGitSyncCommand(resolvedEmail);
 
   const handleTriggerSync = () => {
     setIsSyncing(true);
@@ -103,7 +195,9 @@ git push -u origin main`;
       setSyncStatus('success');
       const now = new Date().toLocaleString();
       setLastSyncTime(now);
-      localStorage.setItem('fnpro_last_github_sync', now);
+      try {
+        localStorage.setItem('fnpro_last_github_sync', now);
+      } catch {}
     }, 1100);
   };
 
@@ -115,38 +209,7 @@ git push -u origin main`;
 
   const handleDownloadBatch = () => {
     const ghubDir = getMandatoryGHubScriptDir();
-    const batContent = `@echo off
-setlocal enabledelayedexpansion
-echo =======================================================================
-echo  FNPro Master Engine - 1-Click GitHub Repository Sync
-echo  Target: ${GITHUB_REPO}
-echo  Author: ${GITHUB_AUTHOR} ^<${activeUserEmail}^>
-echo =======================================================================
-
-:: 1. Navigate directly to local application directory
-set "ENGINE_DIR=%LOCALAPPDATA%\\FNProMasterEngine"
-if not exist "%ENGINE_DIR%" (
-  set "ENGINE_DIR=%~dp0"
-)
-cd /d "%ENGINE_DIR%"
-echo [*] Working Directory locked to: %CD%
-
-:: 2. Target Mandatory Logitech G-HUB script directory
-set "GHUB_DIR=${ghubDir}"
-if not exist "%GHUB_DIR%" mkdir "%GHUB_DIR%" 2>nul
-echo [*] Logitech G-HUB Target Directory: %GHUB_DIR%
-
-:: 3. Execute Git remote sync with full WAL logs & configs
-git config user.name "${GITHUB_AUTHOR}"
-git config user.email "${activeUserEmail}"
-git remote set-url origin ${GITHUB_REPO}
-git add .
-git commit -m "chore(engine): sync SQLite WAL audit logs, RLCS calibrations & C++/Lua subsystems [%date% %time%]"
-git push -u origin main
-echo.
-echo [+] Repository and Audit Log Sync Complete successfully in: %CD%
-pause
-`;
+    const batContent = buildGitSyncBatchScript(resolvedEmail, ghubDir);
     const blob = new Blob([batContent], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -176,12 +239,12 @@ pause
                 {isLoggedIn && (
                   <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-400/50 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                    <span>GOOGLE AUTHENTICATED</span>
+                    <span>GITHUB & GOOGLE SYNCED</span>
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-400 font-mono mt-0.5">
-                userfn-git / FNProMasterEngine · PC Desktop Engine
+                {GITHUB_AUTHOR} ({resolvedEmail}) · FNProMasterEngine
               </p>
             </div>
           </div>
@@ -202,17 +265,42 @@ pause
                 <ShieldCheck className="w-6 h-6 text-cyan-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
                   <h4 className="text-sm font-black text-white font-mono">
-                    {isAr ? 'تسجيل الدخول المباشر بنقرة واحدة بحساب Google' : '1-Click Google Account Sign-In'}
+                    {isAr ? 'تسجيل الدخول المباشر بحساب GitHub / Google' : '1-Click GitHub & Google Account Sign-In'}
                   </h4>
                   <p className="text-xs text-slate-300 leading-relaxed">
                     {isAr
-                      ? 'سجّل دخولك فوراً باستخدام حساب Google لمزامنة سجل العمليات بالكامل (Audit Logs) وإعدادات المحرك مع السحابة بدون أي تعارض أو اختلاف في السجلات.'
-                      : 'Sign in directly with your Google account to sync your complete audit logs, calibrations, and engine database to the cloud with zero discrepancies.'}
+                      ? 'سجّل دخولك فوراً باستخدام بريد GitHub المعتمد لمزامنة سجل العمليات (Audit Logs) وتطبيق git config user.email تلقائياً.'
+                      : 'Sign in with your verified GitHub & Google email to sync audit logs and apply git config user.email automatically.'}
                   </p>
                 </div>
               </div>
 
-              {/* High-visibility Google Sign-In Button */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-mono text-slate-400">
+                  {isAr ? 'بريد GitHub المعتمد (git config user.email):' : 'GitHub Commit Email (git config user.email):'}
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="email"
+                    dir="ltr"
+                    value={activeUserEmail}
+                    onChange={(e) => handleEmailChange(e.target.value)}
+                    placeholder={GITHUB_PRIMARY_EMAIL}
+                    className="flex-1 bg-[#030611] border border-slate-700 focus:border-cyan-400 rounded-lg px-3 py-2 text-xs font-mono text-cyan-300 outline-none"
+                  />
+                  {activeUserEmail.trim() !== GITHUB_PRIMARY_EMAIL && (
+                    <button
+                      type="button"
+                      onClick={handleResetDefaultEmail}
+                      className="px-3 py-2 text-[11px] font-mono bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg border border-slate-700 cursor-pointer whitespace-nowrap"
+                    >
+                      {GITHUB_PRIMARY_EMAIL}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* High-visibility Sign-In Button */}
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
@@ -238,13 +326,13 @@ pause
                   />
                 </svg>
                 <span className="font-semibold">
-                  {isAr ? 'تسجيل الدخول بحساب Google (ai.workgroup.link@gmail.com)' : 'Sign in with Google (ai.workgroup.link@gmail.com)'}
+                  {isAr ? `تسجيل الدخول بحساب (${resolvedEmail})` : `Sign in with Google (${resolvedEmail})`}
                 </span>
               </button>
 
               <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1 border-t border-slate-800">
-                <span>{isAr ? 'الحساب المرتبط:' : 'Linked Profile:'} userfn-git (fnprospace@gmail.com)</span>
-                <span className="text-emerald-400 font-semibold">{isAr ? 'مُعتمد ومحمي 🔒' : 'Verified SSO'}</span>
+                <span>{isAr ? 'الحساب المرتبط:' : 'Linked Profile:'} {GITHUB_AUTHOR} ({resolvedEmail})</span>
+                <span className="text-emerald-400 font-semibold">{isAr ? 'مُعتمد ومحمي' : 'Verified Git Identity'}</span>
               </div>
             </div>
 
@@ -260,31 +348,53 @@ pause
           </div>
         ) : (
           <div className="space-y-4 overflow-y-auto pr-1">
-            {/* Account Summary & Google Profile Banner */}
-            <div className="p-3.5 bg-[#091122] border-2 border-emerald-500/40 rounded-xl flex items-center justify-between shadow-lg">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-400/60 flex items-center justify-center font-black text-emerald-300 font-mono text-sm shadow-[0_0_12px_rgba(16,185,129,0.3)]">
-                  G
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white font-mono">{GITHUB_AUTHOR}</span>
-                    <span className="text-[10px] text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-400/50 font-bold">
-                      ✓ Google Authenticated
-                    </span>
+            {/* Account Summary & Editable Git Email */}
+            <div className="p-3.5 bg-[#091122] border-2 border-emerald-500/40 rounded-xl space-y-3 shadow-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-400/60 flex items-center justify-center font-black text-emerald-300 font-mono text-sm shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+                    G
                   </div>
-                  <div className="text-[11px] text-cyan-300 font-mono">{activeUserEmail}</div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white font-mono">{GITHUB_AUTHOR}</span>
+                      <span className="text-[10px] text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-400/50 font-bold">
+                        ✓ {isAr ? 'مرتبط بـ GitHub' : 'GitHub Ready'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-cyan-300 font-mono">{resolvedEmail}</div>
+                  </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleDisconnect}
+                  className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-rose-400 transition-colors font-mono cursor-pointer px-2 py-1 rounded hover:bg-slate-800"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>{isAr ? 'تسجيل الخروج' : 'Sign Out'}</span>
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={handleDisconnect}
-                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-rose-400 transition-colors font-mono cursor-pointer px-2 py-1 rounded hover:bg-slate-800"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>{isAr ? 'تسجيل الخروج' : 'Sign Out'}</span>
-              </button>
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80">
+                <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap">git user.email:</span>
+                <input
+                  type="email"
+                  dir="ltr"
+                  value={activeUserEmail}
+                  onChange={(e) => handleEmailChange(e.target.value)}
+                  className="flex-1 bg-[#030611] border border-slate-700 focus:border-cyan-400 rounded-lg px-2.5 py-1 text-xs font-mono text-cyan-300 outline-none"
+                />
+                {activeUserEmail.trim() !== GITHUB_PRIMARY_EMAIL && (
+                  <button
+                    type="button"
+                    onClick={handleResetDefaultEmail}
+                    className="px-2.5 py-1 text-[11px] font-mono bg-slate-800 hover:bg-slate-700 text-amber-300 rounded border border-slate-700 cursor-pointer whitespace-nowrap"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Parity Status Banner */}

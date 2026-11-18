@@ -28,16 +28,15 @@ export function getGHubPowerShellCommand(): string {
 export function generateGHubLaunchBatchScript(luaScript: string, customDir?: string): string {
   const scriptDir = customDir || getMandatoryGHubScriptDir();
   return `@echo off
+setlocal EnableDelayedExpansion
 title Rocket League Master Engine - Logitech G HUB 1000Hz Launcher
-echo =======================================================================
-echo [Rocket League Master Engine] Starting Logitech G HUB 1000Hz Engine...
-echo =======================================================================
+call :Log STEP "Starting Logitech G HUB 1000Hz launcher"
 
 :: 1. Lock Mandatory G-HUB Scripts Directory
 set "GHUB_DIR=${scriptDir}"
-echo [*] Mandatory G-HUB Directory: "%GHUB_DIR%"
+call :Log INFO "Mandatory G-HUB directory: %GHUB_DIR%"
 if not exist "%GHUB_DIR%" (
-    echo [*] Creating target directory: "%GHUB_DIR%"...
+    call :Log INFO "Creating target directory: %GHUB_DIR%"
     mkdir "%GHUB_DIR%" 2>nul
 )
 
@@ -48,22 +47,29 @@ if not defined FOUND_EXE if exist "%LocalAppData%\\Programs\\LGHUB\\lghub.exe" s
 if not defined FOUND_EXE if exist "%ProgramFiles%\\LGHUB\\system_tray\\lghub_system_tray.exe" set "FOUND_EXE=%ProgramFiles%\\LGHUB\\system_tray\\lghub_system_tray.exe"
 
 if defined FOUND_EXE (
-    echo [*] Found Logitech G HUB executable at: "%FOUND_EXE%"
-    echo [*] Starting Logitech G HUB...
+    call :Log INFO "Starting Logitech G HUB executable: %FOUND_EXE%"
     start "" "%FOUND_EXE%"
-    echo [OK] Logitech G HUB dispatched successfully!
+    call :Log OK "Logitech G HUB dispatched"
 ) else (
-    echo [!] Standard path not found, triggering protocol lghub:// ...
+    call :Log WARN "Standard executable path not found; invoking protocol lghub://"
     start "" "lghub://"
 )
 
-echo.
-echo [*] Logitech G HUB is starting. Writing to mandatory directory and copying 1000Hz synchronized Lua script...
+call :Log STEP "Deploying 1000Hz Lua script and syncing clipboard"
 powershell -Command "$Script = @'\n${luaScript.replace(/'/g, "''")}\n'@; [System.IO.File]::WriteAllText((Join-Path ([System.Environment]::ExpandEnvironmentVariables('${scriptDir}')) 'rl_master_engine.lua'), $Script, [System.Text.Encoding]::UTF8); Set-Clipboard -Value $Script"
 
-echo [OK] 1000Hz Lua Engine script has been copied to Windows Clipboard and written to "%GHUB_DIR%"!
-echo [*] Paste into Logitech G HUB - Rocket League profile - Scripting editor.
+call :Log OK "1000Hz Lua script written to %GHUB_DIR% and copied to clipboard"
 timeout /t 4 >nul
+exit /b 0
+
+:Log
+set "LOG_LVL=%~1"
+set "LOG_MSG=%~2"
+if /i "%FNPRO_QUIET%"=="1" if /i "!LOG_LVL!"=="INFO" goto :eof
+set "LOG_TS=%TIME:~0,8%"
+set "LOG_TS=!LOG_TS: =0!"
+echo [!LOG_TS!][FNPro][!LOG_LVL!] !LOG_MSG!
+goto :eof
 `;
 }
 
@@ -74,11 +80,17 @@ timeout /t 4 >nul
 export function generateGHubLaunchPowerShellScript(luaScript: string, customDir?: string): string {
   const targetDir = customDir || getMandatoryGHubScriptDir();
   const escapedLua = luaScript.replace(/`/g, '``').replace(/"/g, '`"');
-  return `# =====================================================================
-# ROCKET LEAGUE MASTER ENGINE - LOGITECH G HUB 1000HZ LAUNCHER & INJECTOR
-# =====================================================================
+  return `# Rocket League Master Engine - Logitech G HUB 1000Hz Launcher & Injector
+param([switch]$Quiet = $false)
 
-Write-Host ">>> [RL MASTER ENGINE] Checking Logitech G HUB Installation..." -ForegroundColor Cyan
+function Write-EngineLog {
+    param([ValidateSet("STEP","INFO","OK","WARN","ERROR")][string]$Level, [string]$Message)
+    if ($Quiet -and $Level -eq "INFO") { return }
+    $colorMap = @{ STEP = "Cyan"; INFO = "DarkGray"; OK = "Green"; WARN = "Yellow"; ERROR = "Red" }
+    Write-Host ("[{0}][FNPro][{1}] {2}" -f (Get-Date -Format "HH:mm:ss"), $Level, $Message) -ForegroundColor $colorMap[$Level]
+}
+
+Write-EngineLog -Level "STEP" -Message "Checking Logitech G HUB installation"
 
 $LGHUB_Paths = @(
     "$env:ProgramFiles\\LGHUB\\lghub.exe",
@@ -96,12 +108,11 @@ foreach ($p in $LGHUB_Paths) {
 }
 
 if ($FoundGHub) {
-    Write-Host "[+] Found Logitech G HUB: $FoundGHub" -ForegroundColor Green
-    Write-Host "[+] Launching process..." -ForegroundColor Cyan
+    Write-EngineLog -Level "INFO" -Message "Launching Logitech G HUB: $FoundGHub"
     Start-Process -FilePath $FoundGHub
-    Write-Host "[SUCCESS] Logitech G HUB Started Successfully!" -ForegroundColor Green
+    Write-EngineLog -Level "OK" -Message "Logitech G HUB process started"
 } else {
-    Write-Host "[!] Executable not found in default paths, invoking protocol..." -ForegroundColor Yellow
+    Write-EngineLog -Level "WARN" -Message "Executable not in default paths; invoking lghub:// protocol"
     Start-Process "lghub://"
 }
 
@@ -118,9 +129,8 @@ ${escapedLua}
 "@
 
 [System.IO.File]::WriteAllText($TargetLua, $LuaPayload, [System.Text.Encoding]::UTF8)
-Write-Host "[SUCCESS] Lua 1000Hz Engine injected to: $TargetLua" -ForegroundColor Green
 Set-Clipboard -Value $LuaPayload
-Write-Host "[SUCCESS] Script copied to clipboard for manual paste if needed." -ForegroundColor Cyan
+Write-EngineLog -Level "OK" -Message "Lua 1000Hz engine deployed to $TargetLua and copied to clipboard"
 `;
 }
 

@@ -44,41 +44,30 @@ export const StandalonePackageDownloadModal: React.FC<StandalonePackageDownloadM
   const pythonScriptContent = generatePythonQtScript(physicsConfig, keybindings, timings);
 
   const batchInstallerContent = `@echo off
-setlocal enabledelayedexpansion
-title Rocket League Professional Master Engine [100% Offline Local Master Suite]
-echo =======================================================================
-echo  Rocket League Professional Master Engine (v4.0.2 RLCS Esport Edition)
-echo  100% Offline Local Desktop Suite & Dual Runtime Launcher
-echo =======================================================================
-echo.
+setlocal EnableDelayedExpansion
+title Rocket League Professional Master Engine [Offline Desktop Suite]
+call :Log STEP "Initializing Rocket League Professional Master Engine v4.0.2"
 
-:: 0. CRITICAL FIX FOR C:\\Windows\\System32 DIRECTORY ERROR
+:: 0. Reset working directory from System32 when run elevated
 cd /d "%~dp0"
-echo [*] Working Directory: %CD%
+call :Log INFO "Working directory: %CD%"
 
-:: 1. Intelligent Location Detection for engine_pyside6.py
+:: 1. Locate engine_pyside6.py
 set "PY_SCRIPT=engine_pyside6.py"
 
 if not exist "%PY_SCRIPT%" (
-    echo [*] Checking common user download locations...
+    call :Log INFO "Scanning user folders for engine_pyside6.py..."
     if exist "%USERPROFILE%\\Downloads\\engine_pyside6.py" (
         cd /d "%USERPROFILE%\\Downloads"
-        echo [OK] Located engine_pyside6.py in %USERPROFILE%\\Downloads
+        call :Log OK "Located script in %USERPROFILE%\\Downloads"
     ) else if exist "%USERPROFILE%\\Desktop\\engine_pyside6.py" (
         cd /d "%USERPROFILE%\\Desktop"
-        echo [OK] Located engine_pyside6.py in %USERPROFILE%\\Desktop
+        call :Log OK "Located script in %USERPROFILE%\\Desktop"
     )
 )
 
-echo.
-echo  =======================================================================
-echo   Select 100% Offline Launch Mode:
-echo   [1] Full Master Suite (Exact Identical UI: 11 Tabs, Live Monitors & Radar)
-echo   [2] Native PySide6 Desktop Engine (Windows user32.dll & SQLite)
-echo   [3] All-In-One Unified Launch (Full Suite App Window + Engine)
-echo  =======================================================================
-echo.
-set /p LAUNCH_MODE="Enter selection [1, 2, or 3] (Default=1): "
+call :Log INFO "Launch modes: [1] Full Web Suite  [2] Native PySide6 Engine  [3] Dual Runtime"
+set /p LAUNCH_MODE="Select launch mode [1/2/3] (default 1): "
 if "%LAUNCH_MODE%"=="" set LAUNCH_MODE=1
 
 if "%LAUNCH_MODE%"=="1" goto LAUNCH_WEB_SUITE
@@ -86,22 +75,22 @@ if "%LAUNCH_MODE%"=="2" goto LAUNCH_PYTHON_SUITE
 if "%LAUNCH_MODE%"=="3" goto LAUNCH_BOTH
 
 :LAUNCH_WEB_SUITE
-echo [*] Launching 100% Offline Master Suite in Native Desktop App Window...
+call :Log STEP "Starting offline Master Suite desktop window"
 where npm >nul 2>&1
 if %errorlevel% equ 0 (
     start /b npm run dev
     timeout /t 2 /nobreak >nul
     start msedge.exe --app=http://localhost:3000 || start chrome.exe --app=http://localhost:3000 || start http://localhost:3000
-    echo [OK] Master Suite active at http://localhost:3000
+    call :Log OK "Master Suite active at http://localhost:3000"
     pause
     exit /b 0
 ) else (
-    echo [!] npm not found, falling back to Python PySide6 suite...
+    call :Log WARN "npm not found; falling back to Python PySide6 suite"
     goto LAUNCH_PYTHON_SUITE
 )
 
 :LAUNCH_BOTH
-echo [*] Starting dual runtime offline environment...
+call :Log STEP "Starting dual runtime offline environment"
 where npm >nul 2>&1
 if %errorlevel% equ 0 (
     start /b npm run dev
@@ -113,15 +102,13 @@ if %errorlevel% equ 0 (
 :: 2. Check Python installation
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ERROR] Python 3 is not found in system PATH!
-    echo Please install Python 3.10+ from https://www.python.org/downloads/
-    echo IMPORTANT: Make sure to check the box "Add Python to PATH" during installation.
+    call :Log ERROR "Python 3 not found in PATH. Install Python 3.10+ with 'Add Python to PATH' enabled."
     pause
     exit /b 1
 )
 
 :: 3. Setup local virtual environment (rl_env)
-echo [*] Initializing 100% local virtual environment (rl_env)...
+call :Log INFO "Preparing Python virtual environment (rl_env)"
 if not exist "rl_env" (
     python -m venv rl_env
 )
@@ -130,21 +117,29 @@ if exist "rl_env\\Scripts\\activate.bat" (
 )
 
 :: 4. Install required PySide6 GUI library
-echo [*] Verifying PySide6 desktop requirements...
-pip install --upgrade pip >nul 2>&1
-pip install PySide6 >nul 2>&1
+call :Log INFO "Verifying PySide6 desktop dependency"
+pip install --quiet --upgrade pip >nul 2>&1
+pip install --quiet PySide6 >nul 2>&1
 
 :: 5. Launch standalone suite with SQLite database
-echo [*] Launching Master Engine Desktop Suite (%CD%\\engine_pyside6.py)...
-echo [*] Local SQLite database will persist to: %CD%\\rocket_league_physics.db
+call :Log STEP "Launching %CD%\\engine_pyside6.py (SQLite: %CD%\\rocket_league_physics.db)"
 python engine_pyside6.py
 
 if %errorlevel% neq 0 (
-    echo.
-    echo [!] Process exited with code %errorlevel%.
+    call :Log WARN "Process exited with code %errorlevel%"
 )
 
 pause
+exit /b 0
+
+:Log
+set "LOG_LVL=%~1"
+set "LOG_MSG=%~2"
+if /i "%FNPRO_QUIET%"=="1" if /i "!LOG_LVL!"=="INFO" goto :eof
+set "LOG_TS=%TIME:~0,8%"
+set "LOG_TS=!LOG_TS: =0!"
+echo [!LOG_TS!][FNPro][!LOG_LVL!] !LOG_MSG!
+goto :eof
 `;
 
   const handleDownloadPython = () => {

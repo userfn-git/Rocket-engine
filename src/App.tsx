@@ -19,6 +19,9 @@ import { UnrealSymmetricEngine } from './components/UnrealSymmetricEngine';
 import { BallchasingCloudHub } from './components/BallchasingCloudHub';
 import { LiquipediaSyncPanel } from './components/LiquipediaSyncPanel';
 import { TauriInputProfileManager } from './components/TauriInputProfileManager';
+import { DynamicMasterCockpit } from './components/DynamicMasterCockpit';
+import { HardwareHealthDashboard } from './components/HardwareHealthDashboard';
+import { MacroTimingVisualizer } from './components/MacroTimingVisualizer';
 import { StandalonePackageDownloadModal } from './components/StandalonePackageDownloadModal';
 import { AdminExportModal } from './components/AdminExportModal';
 import { 
@@ -32,6 +35,13 @@ import {
 } from 'lucide-react';
 import { initTempScratchBuffers, initTelemetryDb, getHardwareFingerprint } from './services/fnproNativeBridge';
 import { recordAuditEntry } from './utils/engineAuditLog';
+import {
+  buildUnifiedMasterProfileSnapshot,
+  loadUnifiedMasterProfileSnapshot,
+  persistUnifiedMasterProfileArm,
+  syncProfilesWithPhysicsAndBindings,
+} from './services/unifiedProfileArm';
+import { globalTreeSynchronizer } from './services/treeSynchronizerEngine';
 
 const STORAGE_KEY_PHYSICS = 'fnpro_unified_physics_config';
 const STORAGE_KEY_KEYBINDINGS = 'fnpro_unified_keybindings';
@@ -42,6 +52,8 @@ const STORAGE_KEY_LANGUAGE = 'fnpro_unified_language';
 
 export default function App() {
   const [physicsConfig, setPhysicsConfig] = useState<PhysicsConfig>(() => {
+    const unified = loadUnifiedMasterProfileSnapshot();
+    if (unified?.physicsConfig) return unified.physicsConfig;
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem(STORAGE_KEY_PHYSICS) || localStorage.getItem('fnpro_classic_pro_config_v2');
@@ -59,6 +71,8 @@ export default function App() {
   });
 
   const [keybindings, setKeybindings] = useState<KeyBinding[]>(() => {
+    const unified = loadUnifiedMasterProfileSnapshot();
+    if (unified?.keybindings && unified.keybindings.length > 0) return unified.keybindings;
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem(STORAGE_KEY_KEYBINDINGS);
@@ -76,12 +90,14 @@ export default function App() {
   });
 
   const [macroTimings, setMacroTimings] = useState<MacroTimingConfig>(() => {
+    const unified = loadUnifiedMasterProfileSnapshot();
+    if (unified?.macroTimings?.fastAerial) return unified.macroTimings;
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem(STORAGE_KEY_MACRO_TIMINGS);
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (parsed && typeof parsed.fastAerialHoldMs === 'number') {
+          if (parsed && parsed.fastAerial && typeof parsed.fastAerial.firstJumpSleep === 'number') {
             return parsed;
           }
         }
@@ -110,6 +126,8 @@ export default function App() {
   });
 
   const [activeProfileId, setActiveProfileId] = useState<string>(() => {
+    const unified = loadUnifiedMasterProfileSnapshot();
+    if (unified?.activeProfile?.id) return unified.activeProfile.id;
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(STORAGE_KEY_ACTIVE_PROFILE);
       if (saved) return saved;
@@ -128,7 +146,7 @@ export default function App() {
         return 'unified_radar';
       }
     }
-    return 'classic_pro';
+    return 'dynamic_cockpit';
   });
 
   const [language, setLanguage] = useState<Language>(() => {
@@ -145,43 +163,38 @@ export default function App() {
 
   const isAr = language === 'ar';
 
-  // Persistent synchronization to localStorage
+  const synchronizedProfiles = React.useMemo(
+    () => syncProfilesWithPhysicsAndBindings(gameProfiles, activeProfileId, physicsConfig, keybindings),
+    [gameProfiles, activeProfileId, physicsConfig, keybindings]
+  );
+
+  const unifiedProfileArm = React.useMemo(
+    () =>
+      buildUnifiedMasterProfileSnapshot({
+        profiles: synchronizedProfiles,
+        activeProfileId,
+        physicsConfig,
+        keybindings,
+        macroTimings,
+      }),
+    [synchronizedProfiles, activeProfileId, physicsConfig, keybindings, macroTimings]
+  );
+
+  // Persistent synchronization across Single Master Profile Arm, localStorage, Tauri, and localhost server
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_PHYSICS, JSON.stringify(physicsConfig));
       localStorage.setItem('fnpro_classic_pro_config_v2', JSON.stringify(physicsConfig));
-    } catch {}
-  }, [physicsConfig]);
-
-  useEffect(() => {
-    try {
+      localStorage.setItem('fnpro_unreal_symmetric_config_v2', JSON.stringify(physicsConfig));
       localStorage.setItem(STORAGE_KEY_KEYBINDINGS, JSON.stringify(keybindings));
-    } catch {}
-  }, [keybindings]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem(STORAGE_KEY_MACRO_TIMINGS, JSON.stringify(macroTimings));
-    } catch {}
-  }, [macroTimings]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(gameProfiles));
-    } catch {}
-  }, [gameProfiles]);
-
-  useEffect(() => {
-    try {
+      localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(synchronizedProfiles));
       localStorage.setItem(STORAGE_KEY_ACTIVE_PROFILE, activeProfileId);
-    } catch {}
-  }, [activeProfileId]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem(STORAGE_KEY_LANGUAGE, language);
     } catch {}
-  }, [language]);
+    globalTreeSynchronizer.updateConfig(physicsConfig, macroTimings);
+    persistUnifiedMasterProfileArm(unifiedProfileArm);
+  }, [physicsConfig, keybindings, macroTimings, synchronizedProfiles, activeProfileId, language, unifiedProfileArm]);
 
   // Initialize Native Temp Scratch Buffers & SQLite WAL Database on mount
   useEffect(() => {
@@ -351,6 +364,38 @@ export default function App() {
 
         {/* Unified Master Engine Views */}
         <div className="transition-all duration-200">
+          {activeTab === 'dynamic_cockpit' && (
+            <DynamicMasterCockpit
+              language={language}
+              physicsConfig={physicsConfig}
+              onUpdateConfig={setPhysicsConfig}
+              keybindings={keybindings}
+              macroTimings={macroTimings}
+              unifiedProfileArm={unifiedProfileArm}
+              onNavigateTab={setActiveTab}
+            />
+          )}
+
+          {activeTab === 'hardware_health' && (
+            <HardwareHealthDashboard
+              language={language}
+              physicsConfig={physicsConfig}
+              keybindings={keybindings}
+            />
+          )}
+
+          {activeTab === 'macro_visualizer' && (
+            <MacroTimingVisualizer
+              timings={macroTimings}
+              onChangeTimings={setMacroTimings}
+              language={language}
+              onDispatchToast={(msg) => {
+                setF12Notification(msg);
+                setTimeout(() => setF12Notification(null), 3500);
+              }}
+            />
+          )}
+
           {(activeTab === 'classic_pro' || 
             activeTab === 'physics' || 
             activeTab === 'layer0' || 
@@ -409,7 +454,7 @@ export default function App() {
 
           {(activeTab === 'profiles' || activeTab === 'gaming_profiles') && (
             <TauriInputProfileManager
-              profiles={gameProfiles}
+              profiles={synchronizedProfiles}
               activeProfileId={activeProfileId}
               onSelectProfile={setActiveProfileId}
               onUpdateProfile={handleUpdateProfile}
@@ -456,10 +501,11 @@ export default function App() {
         isOpen={showDevHub}
         onClose={() => setShowDevHub(false)}
         language={language}
-        profiles={gameProfiles}
+        profiles={synchronizedProfiles}
         physicsConfig={physicsConfig}
         keybindings={keybindings}
         activeProfileId={activeProfileId}
+        unifiedProfileArm={unifiedProfileArm}
         onRestorePhysicsConfig={setPhysicsConfig}
         onRestoreKeybindings={setKeybindings}
         onRestoreProfiles={setGameProfiles}

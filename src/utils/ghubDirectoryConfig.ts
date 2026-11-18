@@ -160,7 +160,7 @@ export function setMandatoryGHubScriptDir(newPath: string): { success: boolean; 
 
       // Record in audit log
       recordAuditEntry({
-        section: 'ghub_directory_settings',
+        section: 'system',
         sectionNameAr: 'إعدادات مسار مجلد G-HUB الإلزامي',
         sectionNameEn: 'Mandatory G-HUB Directory Settings',
         paramKey: 'GHUB_SCRIPTS_DIR',
@@ -194,39 +194,34 @@ export function generateRobustGHubBatchScript(
   return `@echo off
 setlocal enabledelayedexpansion
 title Rocket League Master Engine - Logitech G HUB Script Synchronizer
-echo =======================================================================
-echo  Rocket League Professional Master Engine - G-HUB 1000Hz Synchronizer
-echo =======================================================================
-echo.
+call :Log STEP "Initializing Logitech G HUB 1000Hz synchronizer"
 
 :: 1. Define and lock the Mandatory G-HUB Scripts Directory
 set "GHUB_DIR=${dir}"
-echo [*] Target G-HUB Scripts Directory: "!GHUB_DIR!"
+call :Log INFO "Target G-HUB scripts directory: !GHUB_DIR!"
 
 :: 2. Ensure target directory exists, create if missing
 if not exist "!GHUB_DIR!" (
-    echo [*] Directory does not exist. Creating directory: "!GHUB_DIR!"...
+    call :Log INFO "Creating missing directory: !GHUB_DIR!"
     mkdir "!GHUB_DIR!" 2>nul
     if !errorlevel! neq 0 (
-        echo [!] WARNING: Could not create "!GHUB_DIR!". Attempting elevation fallback...
+        call :Log WARN "Could not create !GHUB_DIR!; attempting PowerShell fallback"
         powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path '!GHUB_DIR!'" 2>nul
     )
 )
 
 :: 3. Verify directory accessibility
 if not exist "!GHUB_DIR!" (
-    echo [ERROR] Failed to access or create target directory: "!GHUB_DIR!"
-    echo [*] Falling back to default: "%LOCALAPPDATA%\\LGHUB\\scripts"
+    call :Log ERROR "Failed to access target directory !GHUB_DIR!; falling back to default"
     set "GHUB_DIR=%LOCALAPPDATA%\\LGHUB\\scripts"
     if not exist "!GHUB_DIR!" mkdir "!GHUB_DIR!" 2>nul
 )
 
-echo [OK] Verified G-HUB Directory: "!GHUB_DIR!"
-echo.
+call :Log OK "Verified G-HUB directory: !GHUB_DIR!"
 
 :: 4. Write synchronized 1000Hz Lua script to target directory
 set "TARGET_SCRIPT=!GHUB_DIR!\\rl_master_engine.lua"
-echo [*] Writing 1000Hz Lua Engine script to: "!TARGET_SCRIPT!"...
+call :Log STEP "Writing 1000Hz Lua script to !TARGET_SCRIPT!"
 
 powershell -NoProfile -Command ^
     "$Script = @'\n${escapedLua}\n'@; " ^
@@ -234,14 +229,11 @@ powershell -NoProfile -Command ^
     "Set-Clipboard -Value $Script; "
 
 if exist "!TARGET_SCRIPT!" (
-    echo [SUCCESS] Script written cleanly to: "!TARGET_SCRIPT!"
-    echo [SUCCESS] Script copied to Windows Clipboard for immediate G-HUB paste!
+    call :Log OK "Script saved to !TARGET_SCRIPT! and copied to clipboard"
 ) else (
-    echo [WARNING] Direct file write encountered permissions issue.
-    echo [*] The script has been copied to your Windows Clipboard as a reliable fallback.
+    call :Log WARN "Direct write restricted; script copied to Windows clipboard as fallback"
 )
 
-echo.
 :: 5. Launch Logitech G HUB if not already running
 set "FOUND_EXE="
 if exist "%ProgramFiles%\\LGHUB\\lghub.exe" set "FOUND_EXE=%ProgramFiles%\\LGHUB\\lghub.exe"
@@ -250,18 +242,24 @@ if not defined FOUND_EXE if exist "%LocalAppData%\\Programs\\LGHUB\\lghub.exe" s
 if not defined FOUND_EXE if exist "%ProgramFiles%\\LGHUB\\system_tray\\lghub_system_tray.exe" set "FOUND_EXE=%ProgramFiles%\\LGHUB\\system_tray\\lghub_system_tray.exe"
 
 if defined FOUND_EXE (
-    echo [*] Launching Logitech G HUB from: "!FOUND_EXE!"
+    call :Log INFO "Launching Logitech G HUB: !FOUND_EXE!"
     start "" "!FOUND_EXE!"
 ) else (
-    echo [*] Launching via registered protocol lghub:// ...
+    call :Log INFO "Launching via protocol handler lghub://"
     start "" "lghub://"
 )
 
-echo.
-echo =======================================================================
-echo  [DONE] G-HUB 1000Hz Synchronization Complete without execution errors!
-echo =======================================================================
+call :Log OK "G-HUB 1000Hz synchronization complete"
 timeout /t 3 >nul
 exit /b 0
+
+:Log
+set "LOG_LVL=%~1"
+set "LOG_MSG=%~2"
+if /i "%FNPRO_QUIET%"=="1" if /i "!LOG_LVL!"=="INFO" goto :eof
+set "LOG_TS=%TIME:~0,8%"
+set "LOG_TS=!LOG_TS: =0!"
+echo [!LOG_TS!][FNPro][!LOG_LVL!] !LOG_MSG!
+goto :eof
 `;
 }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/refs/heads/v2/crates/tauri-cli/schema.json",
-  "productName": "Rocket League Master Engine",
+  "productName": "Rocket League Professional Master Engine",
   "version": "2.0.0",
   "identifier": "com.rlpro.masterengine",
   "build": {

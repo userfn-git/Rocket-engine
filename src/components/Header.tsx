@@ -25,7 +25,10 @@ import {
   X,
   Play,
   GitBranch,
-  Code2
+  Code2,
+  Flame,
+  Gauge,
+  BarChart3
 } from 'lucide-react';
 import { isTauriDesktop } from '../services/gemini';
 import { GitHubSyncModal } from './GitHubSyncModal';
@@ -63,7 +66,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const handleDownloadBat = () => {
-    const batContent = `@echo off\r\necho ========================================================\r\necho   FNPro Master Engine - Rocket League Quick Launcher\r\necho ========================================================\r\nstart com.epicgames.launcher://apps/Sugar?action=launch\r\nexit\r\n`;
+    const batContent = `@echo off\r\nsetlocal EnableDelayedExpansion\r\ncall :Log INFO "Launching Rocket League via Epic Games Launcher"\r\nstart com.epicgames.launcher://apps/Sugar?action=launch\r\nexit /b 0\r\n\r\n:Log\r\nset "LOG_TS=%TIME:~0,8%"\r\nset "LOG_TS=!LOG_TS: =0!"\r\necho [!LOG_TS!][FNPro][%~1] %~2\r\ngoto :eof\r\n`;
     const blob = new Blob([batContent], { type: 'application/x-bat' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -74,6 +77,27 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const navItems = [
+    { 
+      id: 'dynamic_cockpit' as ActiveTab, 
+      label: isAr ? 'غرفة القيادة الديناميكية' : 'Dynamic Cockpit', 
+      badge: isAr ? 'تحكم الهاردوير المباشر' : 'Live Hardware HUD',
+      icon: Flame,
+      isPrimaryBranch: (tab: ActiveTab) => tab === 'dynamic_cockpit'
+    },
+    { 
+      id: 'hardware_health' as ActiveTab, 
+      label: isAr ? 'صحة الهاردوير و G PRO 60' : 'Hardware Health & G Pro 60', 
+      badge: '1000Hz Optical',
+      icon: Gauge,
+      isPrimaryBranch: (tab: ActiveTab) => tab === 'hardware_health'
+    },
+    { 
+      id: 'macro_visualizer' as ActiveTab, 
+      label: isAr ? 'مخطط توقيتات الماكرو' : 'Macro Timing Visualizer', 
+      badge: isAr ? 'سحب تفاعلي' : 'Draggable Chart',
+      icon: BarChart3,
+      isPrimaryBranch: (tab: ActiveTab) => tab === 'macro_visualizer'
+    },
     { 
       id: 'classic_pro' as ActiveTab, 
       label: isAr ? 'المحرك الكلاسيكي (الرئيسي)' : 'Classic Pro Engine', 
@@ -126,7 +150,11 @@ export const Header: React.FC<HeaderProps> = ({
         setDispatchToast(`Notice: ${msg}`);
       }
     } else {
-      window.open('lghub://', '_self');
+      try {
+        const a = document.createElement('a');
+        a.href = 'lghub://';
+        a.click();
+      } catch {}
       setDispatchToast('Dispatched lghub://');
     }
     setTimeout(() => setDispatchToast(null), 3000);
@@ -164,46 +192,15 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-[#090d16]/95 backdrop-blur-md border-b border-slate-800 shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-18 gap-4">
-          
+        {/* Row 1: Brand Wordmark + Hardware Launchers & Utilities */}
+        <div className="flex flex-wrap items-center justify-between py-2.5 gap-3 border-b border-slate-800/70">
           {/* Zone 1: Brand Wordmark */}
           <div className="flex items-center shrink-0">
-            <EsportBrandLogo size={44} showText={true} />
+            <EsportBrandLogo size={40} showText={true} />
           </div>
 
-          {/* Zone 2: PC-First 5 Top-Level Master Categories */}
-          <nav className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = item.isPrimaryBranch(activeTab);
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer ${
-                    isActive
-                      ? 'bg-gradient-to-r from-slate-800 to-slate-900 text-cyan-300 border-2 border-cyan-500/60 shadow-md shadow-cyan-950/40 scale-[1.02]'
-                      : 'text-slate-300 hover:text-white bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-400' : 'text-slate-400'}`} />
-                  <span>{item.label}</span>
-                  {item.badge && (
-                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                      isActive 
-                        ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/40' 
-                        : 'bg-slate-950 text-slate-500 border border-slate-800'
-                    }`}>
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-
           {/* Zone 3: PC Desktop Hardware Launchers & Actions */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-2">
             {dispatchToast && (
               <span className="text-[11px] font-mono font-bold text-emerald-400 animate-in fade-in bg-emerald-950/80 px-2.5 py-1 rounded border border-emerald-500/40">
                 {dispatchToast}
@@ -269,9 +266,38 @@ export const Header: React.FC<HeaderProps> = ({
               <span>{language === 'ar' ? 'EN' : 'عربي'}</span>
             </button>
           </div>
-
         </div>
 
+        {/* Row 2: Full-Width Visible Master Module Navigation Tabs */}
+        <nav aria-label={isAr ? 'القائمة الرئيسية للمحرك' : 'Main Engine Navigation'} className="flex flex-wrap items-center gap-1.5 py-2">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = item.isPrimaryBranch(activeTab);
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+                  isActive
+                    ? 'bg-gradient-to-r from-slate-800 to-slate-900 text-cyan-300 border border-cyan-500/70 shadow-sm shadow-cyan-950/50'
+                    : 'text-slate-300 hover:text-white bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800'
+                }`}
+              >
+                <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-cyan-400' : 'text-slate-400'}`} />
+                <span>{item.label}</span>
+                {item.badge && (
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded hidden xl:inline-block ${
+                    isActive 
+                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/40' 
+                      : 'bg-slate-950 text-slate-500 border border-slate-800'
+                  }`}>
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
       </div>
 
       {/* Mandatory G-HUB Directory Settings Modal */}
@@ -352,7 +378,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <span>{copiedCmd ? (isAr ? 'تم النسخ!' : 'Copied!') : (isAr ? 'نسخ الأمر' : 'Copy')}</span>
                   </button>
                 </div>
-                <pre className="p-2 bg-slate-950 border border-slate-800/80 rounded font-mono text-[11px] text-slate-300 overflow-x-auto">
+                <pre dir="ltr" className="p-2 bg-slate-950 border border-slate-800/80 rounded font-mono text-[11px] text-slate-300 overflow-x-auto text-left">
                   {windowsRunCmd}
                 </pre>
                 <div className="text-[10px] text-slate-500">

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Language } from '../types/engine';
+import { getSpeedflipVector, processCoreDeadzone } from '../services/autonomousPipelineEngine';
 import { 
   Cpu, 
   Terminal, 
@@ -28,7 +29,7 @@ interface NativeCppLuaStudioProps {
 
 export const NativeCppLuaStudio: React.FC<NativeCppLuaStudioProps> = ({ language }) => {
   const isAr = language === 'ar';
-  const [activeEngine, setActiveEngine] = useState<'benchmark' | 'blocker' | 'core_dll' | 'mouse' | 'unified' | 'lua_env'>('unified');
+  const [activeEngine, setActiveEngine] = useState<'benchmark' | 'blocker' | 'core_dll' | 'mouse' | 'unified' | 'lua_env' | 'shm_seqlock'>('unified');
   const [copiedCode, setCopiedCode] = useState(false);
 
   // Simulation states
@@ -157,6 +158,23 @@ function controller.process_input(axis_x, axis_y)
     -- Fast O(1) LUT direct 4096 indexing
     return curves.power_lut_direct(raw_mag)
 end`;
+      case 'shm_seqlock': {
+        const hermite = processCoreDeadzone(simX, simY, 0, 0, 0.05, 0.35);
+        const [sfX, sfY] = getSpeedflipVector(-1, 0.05);
+        return `/* fn_shm.c - Native Win32 Seqlock C Extension for Lua 5.4 (68-Byte Frame) */
+// Live Sim Hermite Output: out_x=${hermite.outX.toFixed(4)}, out_y=${hermite.outY.toFixed(4)}
+// Speedflip 28-deg Vector: (${sfX.toFixed(4)}, ${sfY.toFixed(4)})
+#pragma pack(push, 1)
+typedef struct {
+    uint32_t seq;
+    uint32_t magic;            // 0x464E524C ("FNRL")
+    uint64_t tick;
+    uint32_t wheels_touching;  // 4 == Flip Reset Ready
+    float car_pos[3], car_vel[3], ball_pos[3], ball_vel[3];
+} FNTelemetryFrame;
+#pragma pack(pop)
+// Full C source: /assets/aistudio/fn_shm_c740160c.c`;
+      }
     }
   };
 
@@ -201,7 +219,7 @@ end`;
       </div>
 
       {/* Sub-engine selector tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
         <button
           onClick={() => setActiveEngine('unified')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
@@ -278,6 +296,19 @@ end`;
           <div className="text-[10px] font-mono text-purple-400 font-bold">LUA & PY</div>
           <div className="text-xs font-bold truncate mt-0.5">{isAr ? 'بيئة Lua 5.4' : 'Lua 5.4 Environment'}</div>
           <div className="text-[10px] text-slate-500 truncate mt-1">Ctypes & Curves</div>
+        </button>
+
+        <button
+          onClick={() => setActiveEngine('shm_seqlock')}
+          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+            activeEngine === 'shm_seqlock'
+              ? 'bg-indigo-950/60 border-indigo-500 shadow-md shadow-indigo-950/40 text-white'
+              : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white'
+          }`}
+        >
+          <div className="text-[10px] font-mono text-cyan-300 font-bold">FN_SHM.DLL</div>
+          <div className="text-xs font-bold truncate mt-0.5">{isAr ? 'Seqlock 120Hz' : 'Seqlock SHM 68B'}</div>
+          <div className="text-[10px] text-slate-500 truncate mt-1">0-Alloc + 28° Vector</div>
         </button>
       </div>
 
