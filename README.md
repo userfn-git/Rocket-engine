@@ -61,7 +61,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ```bash
 git init
-git config user.name "fnprod"
+git config user.name "userfn-git"
 git config user.email "fnprospace@gmail.com"
 git add .
 git commit -m "feat: complete FNPro Master Engine v4.2.0 Windows 11 native build"
