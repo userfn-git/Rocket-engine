@@ -4,7 +4,7 @@
 **Core Runtime:**  React 19 / TypeScript 5.8 / Vite / Tailwind CSS  
 **Engine Polling:** DirectInput 1000Hz (1.0ms resolution)  
 **Author:** fnprod(`fnprospace@gmail.com`)  
-**Repository:** (https://github.com/fnprod/Rocket-engine))
+**Repository:** (https://github.com/userfn-git/Rocket-engine))
 
 ---
 
