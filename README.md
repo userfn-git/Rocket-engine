@@ -1,71 +1,211 @@
-# FNPro Master Engine (Windows 11 Native Architecture)
+# Rocket Engine
 
-**Target Platform:** Windows 11 Pro 64-bit  
-**Core Runtime:**  React 19 / TypeScript 5.8 / Vite / Tailwind CSS  
-**Engine Polling:** DirectInput 1000Hz (1.0ms resolution)  
-**Author:** fnprod(`fnprospace@gmail.com`)  
-**Repository:** (https://github.com/userfn-git/Rocket-engine))
+A native Windows engineering utility for Rocket League input analysis and telemetry, built with React, TypeScript, Vite, Tauri 2, and Rust.
+
+**Repository:** [userfn-git/Rocket-engine](https://github.com/userfn-git/Rocket-engine)  
+**Platform:** Windows 11 (64-bit)  
+**Author:** fnprod (`fnprospace@gmail.com`)  
+**Status:** Active development
 
 ---
 
 ## Overview
 
-FNPro Master Engine is a production-grade, standalone Windows 11 desktop engineering utility for Rocket League competitive esports. Built with zero web mocks, zero localStorage fallbacks, and zero hardcoded credentials, the engine operates directly at the hardware and kernel boundary.
+Rocket Engine provides visualization and analysis tools for steering, pitch, roll, and mechanics timing. The application combines a React interface with native Windows and Tauri components for low-level input inspection and local telemetry storage.
 
-### Key Capabilities
-1. **Continuous Kinematic Vector Math [-1.0, +1.0]**:
-   - Replaces discrete frame counters with continuous 2D/3D force vectors: Steer, Pitch, Roll.
-   - Symmetric Deadzone & Exponent Curve:
-     $$f(x) = \text{sgn}(x) \cdot \left(\text{clamp}\left(\frac{|x| - \text{deadzone}}{1.0 - \text{deadzone}}, 0.0, 1.0\right)\right)^{1.35}$$
-     Guarantees strict mathematical symmetry: $f(-1.0) = -1.0$, $f(0.0) = 0.0$, $f(+1.0) = +1.0$.
-2. **Supersonic Kinematics State Machine**:
-   - Max Engine Speed: $2300.0\text{ uu/s}$.
-   - $2200.0\text{ uu/s}$ threshold is exactly $95.65\%$ of max velocity.
-   - Supersonic Band Ratio: $P_{\text{supersonic}} = \text{clamp}\left(\frac{v - 2200.0}{2300.0 - 2200.0}, 0.0, 1.0\right)$.
-   - Friction Bleeding Penalty: decelerates vehicle when sharp steering ($|\text{Steer}| > 0.8$) occurs during $P_{\text{supersonic}} > 0.5$.
-3. **2D Polar Vector Scope & RL Moves Codex**:
-   - Visual circular polar radar sampling 1000Hz inputs directly from the fast-path buffer.
-   - Displays continuous trajectory trace, target angle cones (e.g., Speedflip $30^\circ\text{--}42^\circ$), and measures cross-axis torque leakage in real time.
-   - Local mechanics database (`src/data/rlMovesCodex.json`) with frame scrubber and "Apply Timings to Engine" injection.
-4. **Logitech G-HUB Dynamic UUIDv4 Deployment**:
-   - Generates scripts under `%LOCALAPPDATA%\LGHUB\scripts\{UUIDv4}\script.lua`.
-   - Embeds native Bipolar Lua functions: `GetSign(val)`, `Clamp(val, min, max)`, `ApplyBipolarCurve(norm, deadzone, exponent)`.
-   - Converts raw mouse counts $(dx, dy)$ to $[-1.0, 1.0]$ normalized space before curve evaluation.
-   - Non-destructive syntax validation via `validate_lua_script`.
-5. **Hardware Fingerprinting & Secure Vault**:
-   - Native Rust extraction of `MachineGuid` from Windows Registry `HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid`.
-   - SHA-256 derivation of `FNPRO-HWID-XXXXXXXX`.
-   - All credentials and Ballchasing.com tokens encrypted strictly in `%APPDATA%\FNProMasterEngine\vault.key`.
-6. **Dual Hot/Cold Buffering & SQLite WAL**:
-   - Hot-Path: `%TEMP%\FNProMasterEngine\buffers\io_ring_buffer.bin` (64KB pre-allocated ring buffer).
-   - Cold-Path: `%APPDATA%\FNProMasterEngine\fnpro_telemetry.db` (WAL mode with `engine_sessions`, `physics_calibrations`, `input_telemetry_ticks`, `replay_analytics_vault`).
-7. **Developer & Admin Hub**:
-   - Client-side JSZip archiver packaging `fnpro-master-engine-source.zip`.
-   - Automated Windows 11 bootstrapper (`install_dependencies.ps1`).
-   - PowerShell DirectInput benchmarking suite (`FNProEngine.psm1`).
+## Features
+
+- Continuous normalized steering, pitch, and roll values
+- Symmetric deadzone and exponent curves
+- Supersonic and steering-state analysis
+- Polar input visualization and cross-axis torque tracking
+- Local Rocket League mechanics codex with frame timing
+- Logitech G-HUB Lua script generation and syntax validation
+- Windows hardware identity extraction
+- Local SQLite telemetry storage with WAL mode
+- Source archiving and PowerShell setup/build utilities
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for implementation details.
 
 ---
 
-## 1-Click Windows 11 Quick Start
+## Technology Stack
 
-Run PowerShell as Administrator in the repository root:
+- React 19 and TypeScript
+- Vite and Tailwind CSS
+- Tauri 2 and Rust
+- Node.js and npm
+- PowerShell
+- SQLite
+- Lua
+- C/C++ native components
+
+---
+
+## Prerequisites
+
+- Windows 11 64-bit
+- Node.js 18 or newer
+- npm
+- Rust and Cargo (for native/Tauri builds)
+- Microsoft Visual C++ Build Tools (for compiling Tauri and native components)
+- PowerShell 5.1 or newer
+- Windows administrator privileges for system-level setup
+
+> The setup script can locate or install Node.js, but Rust and Microsoft Visual C++ Build Tools are needed for native builds.
+
+---
+
+## Quick Start
+
+From an elevated PowerShell prompt in the repository root:
+
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\install_dependencies.ps1
 ```
 
+The setup script:
+
+1. Resolves and registers `FNPRO_ENGINE_HOME`
+2. Checks or provisions Node.js LTS
+3. Validates and regenerates npm manifests
+4. Installs npm dependencies
+5. Checks Rust, MSVC, Python, and PowerShell tooling
+6. Runs `npm run lint` and `npm run build`
+
+To rerun without preserving existing `node_modules`:
+
+```powershell
+.\install_dependencies.ps1 -CleanInstall
+```
+
+For additional script options:
+
+```powershell
+Get-Help .\install_dependencies.ps1 -Detailed
+```
 
 ---
 
-## Git Automation
+## Development
 
-```bash
-git init
-git config user.name "userfn-git"
-git config user.email "fnprospace@gmail.com"
-git add .
-git commit -m "feat: complete FNPro Master Engine v4.2.0 Windows 11 native build"
-git branch -M main
-git remote add origin https://github.com/userfn-git/Rocket-engine
-git push -u origin main
+```powershell
+npm install
+npm run dev
 ```
+
+Before opening a pull request:
+
+```powershell
+npm run lint
+npm run build
+```
+
+Build the native Windows executable with:
+
+```powershell
+.\build_windows_exe.ps1
+```
+
+Preview a production web build:
+
+```powershell
+npm run preview
+```
+
+---
+
+## Available npm Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start the local development server |
+| `npm run build` | Create a Vite production build |
+| `npm run preview` | Preview the production build |
+| `npm run lint` | Run TypeScript checking |
+| `npm run tauri` | Run Tauri CLI commands |
+| `npm start` | Start the application server |
+
+---
+
+## Local Paths
+
+| Purpose | Path |
+|---|---|
+| Project environment | `FNPRO_ENGINE_HOME` |
+| Application data | `%APPDATA%\FNProMasterEngine` |
+| Temporary buffers | `%TEMP%\FNProMasterEngine` |
+| Telemetry database | `%APPDATA%\FNProMasterEngine\fnpro_telemetry.db` |
+| G-HUB Lua scripts | `%LOCALAPPDATA%\LGHUB\scripts\{UUID}\script.lua` |
+| Rocket League demos | `%USERPROFILE%\Documents\My Games\Rocket League\TAGame\Demos` |
+
+Do not commit credentials, generated vault files, local databases, or hardware identifiers.
+
+---
+
+## Security
+
+Local credentials and hardware-derived identifiers are sensitive. Do not share them or use public issue reports to publish generated data.
+
+Review [SECURITY.md](SECURITY.md) before reporting or testing security behavior. Use the repository’s private vulnerability-reporting channel when available.
+
+---
+
+## Project Structure
+
+```text
+src/          React and TypeScript application code
+src-tauri/    Tauri and Rust native integration
+public/       Static web assets
+server.ts     Local development server
+package.json  npm scripts and dependencies
+```
+
+Additional documentation:
+
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [SECURITY.md](SECURITY.md)
+
+---
+
+## Troubleshooting
+
+### PowerShell execution policy
+
+Use the process-scoped policy shown in Quick Start, or review your organization’s execution-policy settings:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+### Node.js not detected
+
+Install Node.js from <https://nodejs.org/> and reopen PowerShell so the updated `PATH` is loaded. The setup script also has a portable Node.js fallback.
+
+### Native build tools missing
+
+Install Visual Studio with the **Desktop development with C++** workload or the equivalent Microsoft Visual C++ Build Tools. Then verify Rust:
+
+```powershell
+rustc --version
+cargo --version
+```
+
+### G-HUB script not appearing
+
+Confirm that Logitech G-HUB is installed and running, then use the application’s Lua syntax validation before deployment.
+
+---
+
+## Contributing
+
+1. Create a dedicated branch.
+2. Make focused changes.
+3. Run `npm run lint` and `npm run build`.
+4. Test native changes on Windows when applicable.
+5. Open a pull request with setup or behavior changes clearly documented.
+
+## License
+
+No license file is currently published in this repository. All rights remain with the repository owner until a license is added.
