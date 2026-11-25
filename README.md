@@ -66,6 +66,6 @@ git config user.email "fnprospace@gmail.com"
 git add .
 git commit -m "feat: complete FNPro Master Engine v4.2.0 Windows 11 native build"
 git branch -M main
-git remote add origin https://github.com/fnprod/Rocket-engine
+git remote add origin https://github.com/userfn-git/Rocket-engine
 git push -u origin main
 ```
